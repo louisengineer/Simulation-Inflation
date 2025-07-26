@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Taux simulés historiques (tu pourras les automatiser via une API ensuite)
+# --- Taux simulés ---
 TAUX_INTERETS = {
     "Livret A": {
         2015: 0.75, 2016: 0.75, 2017: 0.75, 2018: 0.75,
@@ -10,7 +10,6 @@ TAUX_INTERETS = {
         2023: 3.0, 2024: 3.0
     },
     "LDDS": {
-        # mêmes taux que Livret A pour simplifier
         2015: 0.75, 2016: 0.75, 2017: 0.75, 2018: 0.75,
         2019: 0.75, 2020: 0.5, 2021: 0.5, 2022: 2.0,
         2023: 3.0, 2024: 3.0
@@ -33,17 +32,27 @@ TAUX_INFLATION = {
     2023: 4.9, 2024: 2.4
 }
 
+ANNEES_DISPONIBLES = list(TAUX_INFLATION.keys())
+
 # --- Interface utilisateur ---
-st.title("📈 Simulateur de rendement : Livret A, LDDS, Fonds Monétaire vs Inflation")
+st.title("📈 Simulateur de rendement : Livrets vs Inflation")
 
 montant_initial = st.number_input("💰 Montant initial (€)", value=1000, min_value=100)
 produit = st.selectbox("🏦 Choisissez un placement", list(TAUX_INTERETS.keys()))
-annees = st.slider("⏳ Durée de placement (années)", min_value=1, max_value=10, value=5)
 
-annee_courante = 2024
-annees_simulation = list(range(annee_courante - annees + 1, annee_courante + 1))
+col1, col2 = st.columns(2)
+with col1:
+    annee_debut = st.selectbox("📅 Année de départ", ANNEES_DISPONIBLES, index=0)
+with col2:
+    annee_fin = st.selectbox("📅 Année de fin", ANNEES_DISPONIBLES, index=len(ANNEES_DISPONIBLES) - 1)
 
-# --- Calculs ---
+if annee_debut >= annee_fin:
+    st.error("L'année de fin doit être postérieure à l'année de départ.")
+    st.stop()
+
+annees_simulation = list(range(annee_debut, annee_fin + 1))
+
+# --- Simulation ---
 capital = montant_initial
 capital_constant = montant_initial
 historique = []
@@ -65,7 +74,7 @@ for annee in annees_simulation:
 
 df = pd.DataFrame(historique)
 
-# --- Affichage des résultats ---
+# --- Résultats ---
 st.subheader("📊 Résultats")
 st.write(f"**Capital final :** {capital:,.2f} €")
 st.write(f"**Pouvoir d'achat (euros constants) :** {capital_constant:,.2f} €")
@@ -73,15 +82,17 @@ perte = capital - capital_constant
 if perte > 0:
     st.info(f"📉 Perte de pouvoir d'achat due à l'inflation : {perte:,.2f} €")
 
-# --- Graphiques ---
+# --- Graphique corrigé ---
 st.subheader("📈 Évolution du capital")
 fig, ax = plt.subplots()
 ax.plot(df["Année"], df["Capital (€)"], label="Capital nominal (€)")
 ax.plot(df["Année"], df["Capital constant (€)"], label="Pouvoir d'achat (€)")
 ax.set_ylabel("Montant (€)")
 ax.set_xlabel("Année")
-ax.legend()
+ax.set_xticks(df["Année"].astype(int)) 
+ax.grid(True)
 st.pyplot(fig)
 
+# --- Tableau ---
 st.subheader("📋 Détail annuel")
 st.dataframe(df.set_index("Année").style.format("{:,.2f}"))
