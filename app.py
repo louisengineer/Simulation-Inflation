@@ -1,38 +1,9 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import datetime
 
-# --- Taux simulés ---
-TAUX_INTERETS = {
-    "Livret A": {
-        2015: 0.75, 2016: 0.75, 2017: 0.75, 2018: 0.75,
-        2019: 0.75, 2020: 0.5, 2021: 0.5, 2022: 2.0,
-        2023: 3.0, 2024: 3.0
-    },
-    "LDDS": {
-        2015: 0.75, 2016: 0.75, 2017: 0.75, 2018: 0.75,
-        2019: 0.75, 2020: 0.5, 2021: 0.5, 2022: 2.0,
-        2023: 3.0, 2024: 3.0
-    },
-    "Fonds monétaire": {
-        2015: 0.3, 2016: 0.1, 2017: 0.1, 2018: 0.2,
-        2019: 0.3, 2020: 0.2, 2021: 0.1, 2022: 1.5,
-        2023: 2.0, 2024: 2.2
-    },
-    "Compte courant": {
-        2015: 0.0, 2016: 0.0, 2017: 0.0, 2018: 0.0,
-        2019: 0.0, 2020: 0.0, 2021: 0.0, 2022: 0.0,
-        2023: 0.0, 2024: 0.0
-    }
-}
-
-TAUX_INFLATION = {
-    2015: 0.0, 2016: 0.2, 2017: 1.0, 2018: 1.8,
-    2019: 1.1, 2020: 0.5, 2021: 1.6, 2022: 5.2,
-    2023: 4.9, 2024: 2.4
-}
-
-ANNEES_DISPONIBLES = list(TAUX_INFLATION.keys())
+from data import TAUX_INTERETS, TAUX_INFLATION  # Données externes
 
 # --- Interface utilisateur ---
 st.title("📈 Simulateur de rendement : Livrets vs Inflation")
@@ -40,36 +11,53 @@ st.title("📈 Simulateur de rendement : Livrets vs Inflation")
 montant_initial = st.number_input("💰 Montant initial (€)", value=1000, min_value=100)
 produit = st.selectbox("🏦 Choisissez un placement", list(TAUX_INTERETS.keys()))
 
+
+# Exemple : liste de dates disponibles
+dates_disponibles = sorted(TAUX_INTERETS["Livret A"].keys())  # Format "YYYY-MM"
+
+# Convertir les chaînes "YYYY-MM" en objets datetime.date pour le calendrier
+def to_date_object(date_str):
+    return datetime.strptime(date_str, "%Y-%m").date()
+
+dates_obj = [to_date_object(d) for d in dates_disponibles]
+
+# Choix du mois de début et de fin via date_input
 col1, col2 = st.columns(2)
 with col1:
-    annee_debut = st.selectbox("📅 Année de départ", ANNEES_DISPONIBLES, index=0)
+    date_debut = st.date_input("📅 Mois de départ", value=dates_obj[0], min_value=dates_obj[0], max_value=dates_obj[-1])
 with col2:
-    annee_fin = st.selectbox("📅 Année de fin", ANNEES_DISPONIBLES, index=len(ANNEES_DISPONIBLES) - 1)
+    date_fin = st.date_input("📅 Mois de fin", value=dates_obj[-1], min_value=dates_obj[0], max_value=dates_obj[-1])
 
-if annee_debut >= annee_fin:
-    st.error("L'année de fin doit être postérieure à l'année de départ.")
+# Convertir en "YYYY-MM"
+mois_debut = date_debut.strftime("%Y-%m")
+mois_fin = date_fin.strftime("%Y-%m")
+
+# Vérification
+if mois_debut > mois_fin:
+    st.error("La date de fin doit être postérieure à la date de début.")
     st.stop()
-
-annees_simulation = list(range(annee_debut, annee_fin + 1))
 
 # --- Simulation ---
 capital = montant_initial
 capital_constant = montant_initial
 historique = []
 
-for annee in annees_simulation:
-    taux_interet = TAUX_INTERETS[produit].get(annee, 0) / 100
-    inflation = TAUX_INFLATION.get(annee, 0) / 100
+# Liste des mois entre début et fin
+dates_simulation = pd.date_range(start=mois_debut, end=mois_fin, freq="MS").strftime("%Y-%m").tolist()
 
-    capital *= (1 + taux_interet)
-    capital_constant *= (1 + taux_interet) / (1 + inflation)
+for mois in dates_simulation:
+    taux = TAUX_INTERETS[produit].get(mois, 0) / 100
+    inflation = TAUX_INFLATION.get(mois, 0) / 100
+
+    capital *= (1 + taux / 12)
+    capital_constant *= (1 + taux / 12) / (1 + inflation / 12)
 
     historique.append({
-        "Année": annee,
+        "Date": mois,
         "Capital (€)": capital,
         "Capital constant (€)": capital_constant,
         "Inflation (%)": inflation * 100,
-        "Taux placement (%)": taux_interet * 100
+        "Taux placement (%)": taux * 100
     })
 
 df = pd.DataFrame(historique)
@@ -78,21 +66,35 @@ df = pd.DataFrame(historique)
 st.subheader("📊 Résultats")
 st.write(f"**Capital final :** {capital:,.2f} €")
 st.write(f"**Pouvoir d'achat (euros constants) :** {capital_constant:,.2f} €")
-perte = capital - capital_constant
-if perte > 0:
-    st.info(f"📉 Perte de pouvoir d'achat due à l'inflation : {perte:,.2f} €")
+perte_pouvoir_achat = capital_constant - montant_initial
+if perte_pouvoir_achat < 0:
+    st.info(f"📉 Perte de pouvoir d'achat : {-perte_pouvoir_achat:,.2f} €")
+else:
+    st.success(f"📈 Gain de pouvoir d'achat : {perte_pouvoir_achat:,.2f} €")
 
-# --- Graphique corrigé ---
+
+# --- Graphique ---
 st.subheader("📈 Évolution du capital")
 fig, ax = plt.subplots()
-ax.plot(df["Année"], df["Capital (€)"], label="Capital nominal (€)")
-ax.plot(df["Année"], df["Capital constant (€)"], label="Pouvoir d'achat (€)")
+ax.plot(df["Date"], df["Capital (€)"], label="Capital nominal (€)")
+ax.plot(df["Date"], df["Capital constant (€)"], label="Pouvoir d'achat (€)")
 ax.set_ylabel("Montant (€)")
-ax.set_xlabel("Année")
-ax.set_xticks(df["Année"].astype(int)) 
+ax.set_xlabel("Date")
+ax.set_xticks(df["Date"][::max(len(df)//12,1)])  # Évite surcharge des ticks
+ax.set_xticklabels(df["Date"][::max(len(df)//12,1)], rotation=45)
 ax.grid(True)
+ax.legend()
 st.pyplot(fig)
 
-# --- Tableau ---
-st.subheader("📋 Détail annuel")
-st.dataframe(df.set_index("Année").style.format("{:,.2f}"))
+# --- Graphique 2 : Taux de placement vs inflation ---
+st.subheader("📉 Taux de placement vs Inflation")
+fig2, ax2 = plt.subplots()
+ax2.plot(df["Date"], df["Taux placement (%)"], label="Taux placement (%)", color="green")
+ax2.plot(df["Date"], df["Inflation (%)"], label="Inflation (%)", color="red")
+ax2.set_ylabel("Taux (%)")
+ax2.set_xlabel("Date")
+ax2.set_xticks(df["Date"][::max(len(df)//12,1)])
+ax2.set_xticklabels(df["Date"][::max(len(df)//12,1)], rotation=45)
+ax2.grid(True)
+ax2.legend()
+st.pyplot(fig2)
