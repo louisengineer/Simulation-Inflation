@@ -6,7 +6,7 @@ from datetime import datetime
 from data import TAUX_INTERETS, TAUX_INFLATION  # Données externes
 
 # --- Interface utilisateur ---
-st.title("📈 Simulateur de rendement : Livrets vs Inflation")
+st.title("📈 Simulateur de pouvoir d’achat selon le placement")
 
 montant_initial = st.number_input("💰 Montant initial (€)", value=1000, min_value=100)
 produit = st.selectbox("🏦 Choisissez un placement", list(TAUX_INTERETS.keys()))
@@ -45,19 +45,33 @@ historique = []
 # Liste des mois entre début et fin
 dates_simulation = pd.date_range(start=mois_debut, end=mois_fin, freq="MS").strftime("%Y-%m").tolist()
 
-for mois in dates_simulation:
-    taux = TAUX_INTERETS[produit].get(mois, 0) / 100
-    inflation = TAUX_INFLATION.get(mois, 0) / 100
+produits_variations_mensuelles = ["Bitcoin", "Or", "ETF S&P500 (ESE)"]
 
-    capital *= (1 + taux / 12)
-    capital_constant *= (1 + taux / 12) / (1 + inflation / 12)
+for mois in dates_simulation:
+    if produit in produits_variations_mensuelles:
+        variation_mensuelle = TAUX_INTERETS[produit].get(mois, 0) / 100
+        inflation_mensuelle = TAUX_INFLATION.get(mois, 0) / 100 / 12 
+        
+        capital *= (1 + variation_mensuelle)
+        capital_constant *= (1 + variation_mensuelle) / (1 + inflation_mensuelle)
+        
+        taux_affichage = variation_mensuelle * 100 
+    else:
+        taux_annuel = TAUX_INTERETS[produit].get(mois, 0) / 100
+        inflation_mensuelle = TAUX_INFLATION.get(mois, 0) / 100 / 12
+        
+        taux_mensuel = taux_annuel / 12
+        capital *= (1 + taux_mensuel)
+        capital_constant *= (1 + taux_mensuel) / (1 + inflation_mensuelle)
+        
+        taux_affichage = taux_annuel * 100
 
     historique.append({
         "Date": mois,
         "Capital (€)": capital,
         "Capital constant (€)": capital_constant,
-        "Inflation (%)": inflation * 100,
-        "Taux placement (%)": taux * 100
+        "Inflation (%)": inflation_mensuelle * 12 * 100, 
+        "Taux placement (%)": taux_affichage
     })
 
 df = pd.DataFrame(historique)
@@ -87,14 +101,17 @@ ax.legend()
 st.pyplot(fig)
 
 # --- Graphique 2 : Taux de placement vs inflation ---
-st.subheader("📉 Taux de placement vs Inflation")
-fig2, ax2 = plt.subplots()
-ax2.plot(df["Date"], df["Taux placement (%)"], label="Taux placement (%)", color="green")
-ax2.plot(df["Date"], df["Inflation (%)"], label="Inflation (%)", color="red")
-ax2.set_ylabel("Taux (%)")
-ax2.set_xlabel("Date")
-ax2.set_xticks(df["Date"][::max(len(df)//12,1)])
-ax2.set_xticklabels(df["Date"][::max(len(df)//12,1)], rotation=45)
-ax2.grid(True)
-ax2.legend()
-st.pyplot(fig2)
+if produit not in produits_variations_mensuelles:
+    st.subheader("📉 Taux de placement vs Inflation")
+    fig2, ax2 = plt.subplots()
+    ax2.plot(df["Date"], df["Taux placement (%)"], label="Taux placement (%)", color="green")
+    ax2.plot(df["Date"], df["Inflation (%)"], label="Inflation (%)", color="red")
+    ax2.set_ylabel("Taux (%)")
+    ax2.set_xlabel("Date")
+    ax2.set_xticks(df["Date"][::max(len(df)//12,1)])
+    ax2.set_xticklabels(df["Date"][::max(len(df)//12,1)], rotation=45)
+    ax2.grid(True)
+    ax2.legend()
+    st.pyplot(fig2)
+else:
+    st.info("📉 Graphique Taux vs Inflation non affiché pour ce type de placement (volatilité trop élevée).")
