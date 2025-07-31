@@ -45,7 +45,7 @@ historique = []
 # Liste des mois entre début et fin
 dates_simulation = pd.date_range(start=mois_debut, end=mois_fin, freq="MS").strftime("%Y-%m").tolist()
 
-produits_variations_mensuelles = ["Bitcoin", "Or", "ETF S&P500 (ESE)"]
+produits_variations_mensuelles = ["Bitcoin", "Or", "ETF S&P500 (ESE)", "CAC40"]
 
 for mois in dates_simulation:
     if produit in produits_variations_mensuelles:
